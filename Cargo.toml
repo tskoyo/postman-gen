@@ -3,4 +3,11 @@ name = "postman-gen"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+proc-macro = true
+
 [dependencies]
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+serde_json = "1"
+proc-macro2 = "1"
