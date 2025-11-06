@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
 use syn::{DeriveInput, Error, Ident, LitStr, Result, Token, parse::Parse, parse_macro_input};
 
+mod postman;
+
 struct EndpointAttr {
     method: LitStr,
     path: LitStr,
