@@ -21,10 +21,28 @@ pub struct Item {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
-    pub description: String,
-    pub header: Header,
     pub method: String,
+    pub header: Header,
+    pub body: Body,
     pub url: Url,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Body {
+    pub mode: String,
+    pub raw: String,
+    pub options: BodyOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BodyOptions {
+    pub raw: RawOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RawOptions {
+    pub language: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
