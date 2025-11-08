@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use syn::Data::Struct;
 use syn::{DeriveInput, Error, Ident, LitStr, Result, Token, parse::Parse, parse_macro_input};
 
 mod postman;
@@ -6,6 +7,37 @@ mod postman;
 struct EndpointAttr {
     method: LitStr,
     path: LitStr,
+}
+
+struct FieldAttr {
+    description: LitStr,
+    example: LitStr,
+}
+
+impl Parse for FieldAttr {
+    fn parse(input: syn::parse::ParseStream) -> Result<Self> {
+        // Parse: description
+        let key1: Ident = input.parse()?;
+        input.parse::<Token![=]>()?;
+        let val1: LitStr = input.parse()?;
+        input.parse::<Token![,]>()?;
+
+        let key2: Ident = input.parse()?;
+        input.parse::<Token![=]>()?;
+        let val2: LitStr = input.parse()?;
+
+        if key1 != "description" || key2 != "example" {
+            return Err(Error::new_spanned(
+                key1,
+                "expected `description` and `example`",
+            ));
+        }
+
+        Ok(FieldAttr {
+            description: val1,
+            example: val2,
+        })
+    }
 }
 
 impl Parse for EndpointAttr {
@@ -37,7 +69,7 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
 
     for attr in derived_input.attrs {
         if attr.path().is_ident("endpoint") {
-            let s = match attr.parse_args::<EndpointAttr>() {
+            match attr.parse_args::<EndpointAttr>() {
                 Ok(endpoint_attr) => format!(
                     "Endpoint method: {}, path: {}",
                     endpoint_attr.method.value(),
@@ -45,8 +77,22 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                 ),
                 Err(e) => format!("Error parsing endpoint attribute: {}", e),
             };
+        }
+    }
 
-            println!("Final s: {}", s);
+    if let Struct(data_struct) = derived_input.data {
+        for field in data_struct.fields {
+            for attr in field.attrs {
+                if attr.path().is_ident("field") {
+                    match attr.parse_args::<FieldAttr>() {
+                        Ok(field_attr) => {
+                            field_attr.description.value();
+                            field_attr.example.value()
+                        }
+                        Err(e) => format!("Error parsing field attribute: {}", e),
+                    };
+                }
+            }
         }
     }
 
