@@ -2,6 +2,8 @@ use proc_macro::TokenStream;
 use syn::Data::Struct;
 use syn::{DeriveInput, Error, Ident, LitStr, Result, Token, parse::Parse, parse_macro_input};
 
+use crate::postman::{Request, Url};
+
 mod postman;
 
 struct EndpointAttr {
@@ -70,12 +72,43 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
     for attr in derived_input.attrs {
         if attr.path().is_ident("endpoint") {
             match attr.parse_args::<EndpointAttr>() {
-                Ok(endpoint_attr) => format!(
-                    "Endpoint method: {}, path: {}",
-                    endpoint_attr.method.value(),
-                    endpoint_attr.path.value()
-                ),
-                Err(e) => format!("Error parsing endpoint attribute: {}", e),
+                Ok(endpoint_attr) => {
+                    let path: Vec<String> = endpoint_attr
+                        .path
+                        .value()
+                        .split("")
+                        .map(|s| s.to_owned())
+                        .collect();
+
+                    let url = Url {
+                        host: vec!["api".to_string(), "example".to_string(), "com".to_string()],
+                        path,
+                        protocol: "https".to_string(),
+                    };
+
+                    let request = Request {
+                        method: endpoint_attr.method.value(),
+                        description: "".to_string(),
+                        url,
+                        header: postman::Header {
+                            key: "Content-Type".to_string(),
+                            value: "application/json".to_string(),
+                            description: "Content type".to_string(),
+                            r#type: "text".to_string(),
+                            enabled: true,
+                        },
+                        body: postman::Body {
+                            mode: "raw".to_string(),
+                            raw: "".to_string(),
+                            options: postman::BodyOptions {
+                                raw: postman::RawOptions {
+                                    language: "json".to_string(),
+                                },
+                            },
+                        },
+                    };
+                }
+                Err(e) => println!("Error parsing endpoint attribute: {}", e),
             };
         }
     }

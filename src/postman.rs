@@ -54,9 +54,9 @@ pub struct Url {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Header {
-    key: String,
-    value: String,
-    description: String,
-    r#type: String,
-    enabled: bool,
+    pub key: String,
+    pub value: String,
+    pub description: String,
+    pub r#type: String,
+    pub enabled: bool,
 }
