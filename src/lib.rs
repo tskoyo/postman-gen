@@ -1,8 +1,10 @@
-use proc_macro::TokenStream;
-use syn::Data::Struct;
-use syn::{DeriveInput, Error, Ident, LitStr, Result, Token, parse::Parse, parse_macro_input};
+use std::fs;
 
 use crate::postman::{Request, Url};
+use proc_macro::TokenStream;
+use serde_json;
+use syn::Data::Struct;
+use syn::{DeriveInput, Error, Ident, LitStr, Result, Token, parse::Parse, parse_macro_input};
 
 mod postman;
 
@@ -76,7 +78,7 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                     let path: Vec<String> = endpoint_attr
                         .path
                         .value()
-                        .split("")
+                        .split("/")
                         .map(|s| s.to_owned())
                         .collect();
 
@@ -107,6 +109,31 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                             },
                         },
                     };
+
+                    let json = match serde_json::to_string_pretty(&request) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            println!("Error serializing to JSON: {}", e);
+                            return TokenStream::new();
+                        }
+                    };
+
+                    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+                        let mut path = std::path::PathBuf::from(manifest_dir);
+                        path.push("target/postman_request.json");
+
+                        println!("Writing Postman request JSON to {}", path.display());
+
+                        if let Err(e) = fs::create_dir_all(path.parent().unwrap()) {
+                            println!("Error creating directories: {}", e);
+                            return TokenStream::new();
+                        }
+
+                        if let Err(e) = fs::write(path, json) {
+                            println!("Error writing JSON to file: {}", e);
+                            return TokenStream::new();
+                        }
+                    }
                 }
                 Err(e) => println!("Error parsing endpoint attribute: {}", e),
             };
