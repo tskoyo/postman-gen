@@ -1,6 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct PostmanCollection {
+    pub collection: Collection,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Collection {
     pub info: Info,
     pub item: Vec<Item>,
@@ -22,7 +27,7 @@ pub struct Item {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
     pub method: String,
-    pub header: Header,
+    pub header: Vec<Header>,
     pub body: Body,
     pub url: Url,
     pub description: String,

@@ -1,6 +1,7 @@
-use std::fs;
+use std::process::Command;
 
-use crate::postman::{Request, Url};
+use crate::postman::{Collection, Info, Item, PostmanCollection, Request, Url};
+use dotenv::dotenv;
 use proc_macro::TokenStream;
 use serde_json;
 use syn::Data::Struct;
@@ -69,6 +70,8 @@ impl Parse for EndpointAttr {
 
 #[proc_macro_derive(Payload, attributes(endpoint, description, field))]
 pub fn derive_payload(input: TokenStream) -> TokenStream {
+    dotenv().ok();
+
     let derived_input = parse_macro_input!(input as DeriveInput);
 
     for attr in derived_input.attrs {
@@ -88,17 +91,26 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                         protocol: "https".to_string(),
                     };
 
+                    let info = Info {
+                        description: "API postman Collection".to_string(),
+                        name: "Example API created from postman".to_string(),
+                        schema:
+                            "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+                                .to_string(),
+                    };
+
+                    let method = endpoint_attr.method.value();
                     let request = Request {
-                        method: endpoint_attr.method.value(),
+                        method: method.clone(),
                         description: "".to_string(),
                         url,
-                        header: postman::Header {
+                        header: vec![postman::Header {
                             key: "Content-Type".to_string(),
                             value: "application/json".to_string(),
                             description: "Content type".to_string(),
                             r#type: "text".to_string(),
                             enabled: true,
-                        },
+                        }],
                         body: postman::Body {
                             mode: "raw".to_string(),
                             raw: "".to_string(),
@@ -110,28 +122,48 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                         },
                     };
 
-                    let json = match serde_json::to_string_pretty(&request) {
-                        Ok(j) => j,
-                        Err(e) => {
-                            println!("Error serializing to JSON: {}", e);
-                            return TokenStream::new();
-                        }
+                    let item = Item {
+                        name: "Example Endpoint".to_string(),
+                        request,
                     };
 
-                    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-                        let mut path = std::path::PathBuf::from(manifest_dir);
-                        path.push("target/postman_request.json");
+                    let collection = Collection {
+                        info,
+                        item: vec![item],
+                    };
 
-                        println!("Writing Postman request JSON to {}", path.display());
+                    let postman_collection = PostmanCollection { collection };
 
-                        if let Err(e) = fs::create_dir_all(path.parent().unwrap()) {
-                            println!("Error creating directories: {}", e);
-                            return TokenStream::new();
-                        }
+                    let api_key = std::env::var("POSTMAN_API_KEY")
+                        .map_err(|e| format!("Error happened: {}", e));
 
-                        if let Err(e) = fs::write(path, json) {
-                            println!("Error writing JSON to file: {}", e);
-                            return TokenStream::new();
+                    if api_key.is_err() {
+                        println!("POSTMAN_API_KEY environment variable not set");
+                        return TokenStream::new();
+                    }
+
+                    if let Ok(payload) = serde_json::to_string(&postman_collection) {
+                        let ouptut = Command::new("curl")
+                            .arg("-X")
+                            .arg(method)
+                            .arg("https://api.getpostman.com/collections")
+                            .arg("-H")
+                            .arg(format!("X-Api-Key: {}", api_key.unwrap()))
+                            .arg("-H")
+                            .arg("Content-Type: application/json")
+                            .arg("-d")
+                            .arg(payload)
+                            .output();
+
+                        match ouptut {
+                            Ok(output) => {
+                                println!("Postman response status: {}", output.status);
+                                println!(
+                                    "Response body: {}",
+                                    String::from_utf8_lossy(&output.stdout)
+                                );
+                            }
+                            Err(e) => println!("Error executing curl command: {}", e),
                         }
                     }
                 }
