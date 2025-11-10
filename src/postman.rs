@@ -65,3 +65,15 @@ pub struct Header {
     pub r#type: String,
     pub enabled: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateCollectionResponse {
+    pub collection: CollectionInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CollectionInfo {
+    pub id: String,
+    pub name: String,
+    pub uid: String,
+}

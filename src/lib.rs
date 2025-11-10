@@ -1,6 +1,8 @@
 use std::process::Command;
 
-use crate::postman::{Collection, Info, Item, PostmanCollection, Request, Url};
+use crate::postman::{
+    Collection, CreateCollectionResponse, Info, Item, PostmanCollection, Request, Url,
+};
 use dotenv::dotenv;
 use proc_macro::TokenStream;
 use serde_json;
@@ -157,11 +159,20 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
 
                         match ouptut {
                             Ok(output) => {
-                                println!("Postman response status: {}", output.status);
-                                println!(
-                                    "Response body: {}",
-                                    String::from_utf8_lossy(&output.stdout)
-                                );
+                                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+
+                                let response: std::result::Result<
+                                    CreateCollectionResponse,
+                                    serde_json::Error,
+                                > = serde_json::from_str(&stdout);
+
+                                match response {
+                                    Ok(resp) => println!(
+                                        "Collection created with UID: {}",
+                                        resp.collection.uid
+                                    ),
+                                    Err(e) => println!("Error parsing Postman API response: {}", e),
+                                }
                             }
                             Err(e) => println!("Error executing curl command: {}", e),
                         }
