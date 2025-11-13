@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 
 use crate::postman::{Collection, Info, Item, PostmanCollection, Request, Url};
 use dotenv::dotenv;
@@ -82,7 +83,7 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
         }
     }
 
-    let mut field_data: Vec<HashMap<String, String>> = Vec::new();
+    let mut field_data: HashMap<String, String> = HashMap::new();
 
     if let Struct(data_struct) = derived_input.data {
         for field in data_struct.fields {
@@ -92,11 +93,7 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                 if attr.path().is_ident("field") {
                     match attr.parse_args::<FieldAttr>() {
                         Ok(field_attr) => {
-                            field_data.push(HashMap::from([
-                                ("name".to_string(), field_name.clone()),
-                                ("description".to_string(), field_attr.description.value()),
-                                ("example".to_string(), field_attr.example.value()),
-                            ]));
+                            field_data.insert(field_name.clone(), field_attr.example.value());
                         }
                         Err(e) => panic!("Error parsing field attribute: {}", e),
                     };
