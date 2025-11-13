@@ -1,9 +1,6 @@
 use std::collections::HashMap;
-use std::process::Command;
 
-use crate::postman::{
-    Collection, CreateCollectionResponse, Info, Item, PostmanCollection, Request, Url,
-};
+use crate::postman::{Collection, Info, Item, PostmanCollection, Request, Url};
 use dotenv::dotenv;
 use proc_macro::TokenStream;
 use serde_json;
@@ -163,46 +160,8 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
         };
 
         let postman_collection = PostmanCollection { collection };
-        let api_key =
-            std::env::var("POSTMAN_API_KEY").map_err(|e| format!("Error happened: {}", e));
 
-        if api_key.is_err() {
-            println!("POSTMAN_API_KEY environment variable not set");
-            return TokenStream::new();
-        }
-
-        if let Ok(payload) = serde_json::to_string(&postman_collection) {
-            println!("Sending a request to Postman API...");
-
-            let ouptut = Command::new("curl")
-                .arg("-X")
-                .arg(method)
-                .arg("https://api.getpostman.com/collections")
-                .arg("-H")
-                .arg(format!("X-Api-Key: {}", api_key.unwrap()))
-                .arg("-H")
-                .arg("Content-Type: application/json")
-                .arg("-d")
-                .arg(payload)
-                .output();
-
-            match ouptut {
-                Ok(output) => {
-                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-
-                    let response: std::result::Result<CreateCollectionResponse, serde_json::Error> =
-                        serde_json::from_str(&stdout);
-
-                    match response {
-                        Ok(resp) => {
-                            println!("Collection created with UID: {}", resp.collection.uid)
-                        }
-                        Err(e) => println!("Error parsing Postman API response: {}", e),
-                    }
-                }
-                Err(e) => println!("Error executing curl command: {}", e),
-            }
-        }
+        extract_json_file(postman_collection);
     } else {
         return syn::Error::new_spanned(
             derived_input.ident,
@@ -213,6 +172,18 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
     }
 
     TokenStream::new()
+}
+
+fn extract_json_file(collection: PostmanCollection) {
+    let json_payload = serde_json::to_string_pretty(&collection).unwrap();
+    let out_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let path = format!("{}/target/postman_collection.json", out_dir);
+
+    let write_res = std::fs::write(path, json_payload);
+    if let Err(e) = write_res {
+        panic!("Error writing Postman collection to file: {}", e);
+    }
+    println!("Postman collection written to {}/target", out_dir);
 }
 
 fn extract_endpoint_attribute(attr: Attribute) -> EndpointAttr {
