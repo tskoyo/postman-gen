@@ -12,6 +12,7 @@ mod postman;
 struct EndpointAttr {
     method: LitStr,
     path: LitStr,
+    name: LitStr,
 }
 
 struct FieldAttr {
@@ -44,6 +45,21 @@ impl Parse for EndpointAttr {
         input.parse::<Token![=]>()?;
         let val2: LitStr = input.parse()?;
 
+        let mut name = LitStr::new("Example endpoint", val2.span());
+        if input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+
+            let key3: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let val3: LitStr = input.parse()?;
+
+            if key3 != "name" {
+                return Err(Error::new_spanned(key3, "expected key `name`"));
+            }
+
+            name = val3;
+        }
+
         if key1 != "method" || key2 != "path" {
             return Err(Error::new_spanned(key1, "expected `method` and `path`"));
         }
@@ -51,6 +67,7 @@ impl Parse for EndpointAttr {
         Ok(EndpointAttr {
             method: val1,
             path: val2,
+            name,
         })
     }
 }
@@ -153,7 +170,7 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
         };
 
         let item = Item {
-            name: "Example Endpoint".to_string(),
+            name: endpoint.name.value(),
             request,
         };
 
