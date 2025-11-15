@@ -2,8 +2,9 @@ use crate::postman::{Collection, Info, Item, PostmanCollection, Request, Url};
 use proc_macro::TokenStream;
 use serde_json::Value;
 use std::collections::HashMap;
-use syn::Attribute;
+use std::io;
 use syn::Data::Struct;
+use syn::parse::ParseStream;
 use syn::{DeriveInput, Error, Ident, LitStr, Result, Token, parse::Parse, parse_macro_input};
 
 mod postman;
@@ -18,14 +19,13 @@ struct FieldAttr {
 }
 
 impl Parse for FieldAttr {
-    fn parse(input: syn::parse::ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self> {
         let key: Ident = input.parse()?;
-
         input.parse::<Token![=]>()?;
         let val: LitStr = input.parse()?;
 
         if key != "example" {
-            return Err(Error::new_spanned(key, "expected key to be `description`"));
+            return Err(Error::new_spanned(key, "expected key `example`"));
         }
 
         Ok(FieldAttr { example: val })
@@ -62,7 +62,17 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
     let mut endpoint_attr: Option<EndpointAttr> = None;
     for attr in derived_input.attrs {
         if attr.path().is_ident("endpoint") {
-            endpoint_attr = Some(extract_endpoint_attribute(attr));
+            endpoint_attr = match attr.parse_args::<EndpointAttr>() {
+                Ok(endpoint_attr) => Some(endpoint_attr),
+                Err(e) => {
+                    return syn::Error::new_spanned(
+                        attr.path(),
+                        format!("failed to parse field: {}", e),
+                    )
+                    .to_compile_error()
+                    .into();
+                }
+            }
         }
     }
 
@@ -84,7 +94,14 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                             };
                             field_data.insert(field_name.clone(), example_json)
                         }
-                        Err(e) => panic!("Error parsing field attribute: {}", e),
+                        Err(e) => {
+                            return syn::Error::new_spanned(
+                                attr.path(),
+                                format!("failed to parse field: {}", e),
+                            )
+                            .to_compile_error()
+                            .into();
+                        }
                     };
                 }
             }
@@ -121,7 +138,7 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                 key: "Content-Type".to_string(),
                 value: "application/json".to_string(),
                 description: "Content type".to_string(),
-                r#type: "text".to_string(),
+                r#type: None,
                 enabled: true,
             }],
             body: postman::Body {
@@ -147,7 +164,16 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
 
         let postman_collection = PostmanCollection { collection };
 
-        extract_json_file(postman_collection);
+        let json_result = extract_json_file(postman_collection);
+
+        if let Err(e) = json_result {
+            return syn::Error::new_spanned(
+                derived_input.ident,
+                format!("Failed to write Postman collection: {}", e),
+            )
+            .to_compile_error()
+            .into();
+        }
     } else {
         return syn::Error::new_spanned(
             derived_input.ident,
@@ -160,21 +186,14 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
     TokenStream::new()
 }
 
-fn extract_json_file(collection: PostmanCollection) {
+fn extract_json_file(collection: PostmanCollection) -> io::Result<()> {
     let json_payload = serde_json::to_string_pretty(&collection).unwrap();
-    let out_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let path = format!("{}/target/postman_collection.json", out_dir);
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let path = format!("{}/target/postman_collection.json", manifest_dir);
 
-    let write_res = std::fs::write(path, json_payload);
-    if let Err(e) = write_res {
-        panic!("Error writing Postman collection to file: {}", e);
-    }
-    println!("Postman collection written to {}/target", out_dir);
-}
+    std::fs::write(path, json_payload)?;
 
-fn extract_endpoint_attribute(attr: Attribute) -> EndpointAttr {
-    match attr.parse_args::<EndpointAttr>() {
-        Ok(endpoint_attr) => endpoint_attr,
-        Err(e) => panic!("Error parsing endpoint attribute: {}", e),
-    }
+    println!("Postman collection written to {}/target", manifest_dir);
+
+    Ok(())
 }

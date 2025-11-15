@@ -62,7 +62,7 @@ pub struct Header {
     pub key: String,
     pub value: String,
     pub description: String,
-    pub r#type: String,
+    pub r#type: Option<String>,
     pub enabled: bool,
 }
 
