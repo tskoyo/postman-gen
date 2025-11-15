@@ -1,10 +1,7 @@
-use std::collections::HashMap;
-use std::hash::Hash;
-
 use crate::postman::{Collection, Info, Item, PostmanCollection, Request, Url};
-use dotenv::dotenv;
 use proc_macro::TokenStream;
-use serde_json;
+use serde_json::Value;
+use std::collections::HashMap;
 use syn::Attribute;
 use syn::Data::Struct;
 use syn::{DeriveInput, Error, Ident, LitStr, Result, Token, parse::Parse, parse_macro_input};
@@ -17,33 +14,21 @@ struct EndpointAttr {
 }
 
 struct FieldAttr {
-    description: LitStr,
     example: LitStr,
 }
 
 impl Parse for FieldAttr {
     fn parse(input: syn::parse::ParseStream) -> Result<Self> {
-        // Parse: description
-        let key1: Ident = input.parse()?;
-        input.parse::<Token![=]>()?;
-        let val1: LitStr = input.parse()?;
-        input.parse::<Token![,]>()?;
+        let key: Ident = input.parse()?;
 
-        let key2: Ident = input.parse()?;
         input.parse::<Token![=]>()?;
-        let val2: LitStr = input.parse()?;
+        let val: LitStr = input.parse()?;
 
-        if key1 != "description" || key2 != "example" {
-            return Err(Error::new_spanned(
-                key1,
-                "expected `description` and `example`",
-            ));
+        if key != "example" {
+            return Err(Error::new_spanned(key, "expected key to be `description`"));
         }
 
-        Ok(FieldAttr {
-            description: val1,
-            example: val2,
-        })
+        Ok(FieldAttr { example: val })
     }
 }
 
@@ -72,8 +57,6 @@ impl Parse for EndpointAttr {
 
 #[proc_macro_derive(Payload, attributes(endpoint, description, field))]
 pub fn derive_payload(input: TokenStream) -> TokenStream {
-    dotenv().ok();
-
     let derived_input = parse_macro_input!(input as DeriveInput);
 
     let mut endpoint_attr: Option<EndpointAttr> = None;
@@ -83,7 +66,7 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
         }
     }
 
-    let mut field_data: HashMap<String, String> = HashMap::new();
+    let mut field_data: HashMap<String, Value> = HashMap::new();
 
     if let Struct(data_struct) = derived_input.data {
         for field in data_struct.fields {
@@ -93,7 +76,13 @@ pub fn derive_payload(input: TokenStream) -> TokenStream {
                 if attr.path().is_ident("field") {
                     match attr.parse_args::<FieldAttr>() {
                         Ok(field_attr) => {
-                            field_data.insert(field_name.clone(), field_attr.example.value());
+                            let example_json = match serde_json::from_str::<Value>(
+                                field_attr.example.value().as_str(),
+                            ) {
+                                Ok(json) => json,
+                                Err(_) => Value::String(field_attr.example.value()),
+                            };
+                            field_data.insert(field_name.clone(), example_json)
                         }
                         Err(e) => panic!("Error parsing field attribute: {}", e),
                     };
